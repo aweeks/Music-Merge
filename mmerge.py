@@ -34,6 +34,7 @@ def main():
     parser = OptionParser()
     parser.add_option( "-p", "--pretend", action="store_true", dest="pretend", default=False, help="do not write any changes to disk")
     parser.add_option( "-v", "--verbose", action="store_true", dest="verbose", default=False, help="verbose output")
+    
     parser.add_option( "-d", "--debug", action="store_true", dest="debug", default=False, help="debug output")
     parser.add_option( "-i", "--index", action="store_true", dest="index", default=False, help="index media files")
     parser.add_option( "-o", "--organize", action="store_true", dest="organize", default=False, help="organize media files")
@@ -50,22 +51,23 @@ def main():
         print "options:", options
         print "args:", args
 
-    if options.index:
-        index()
-
-    if options.organize and not options.merge:
+    
+    #Ensure target is selected if organizing or merging
+    if options.organize or options.merge:
         if not options.target:
             parser.error("no target is selected for organize")
-        index()
-        organize()
 
     if options.merge:
-        if not options.target:
-            parser.error("no target is selected for organize")
         index()
         merge()
         organize()
+    
+    elif options.organize:
+        index()
+        organize()
 
+    elif options.index:
+        index()
 
 #Taken from http://www.brunningonline.net/simon/blog/archives/002022.html
 def locate(pattern, root):
@@ -79,10 +81,17 @@ def merge():
     Examine each candidate file in turn.  Determine whether it is a duplicate.  If it is not a duplicate, add it to merged.
     If it is a duplicate, determine whether it is superior to the file that is already there, and replace it if so.
     """
+
+    if options.verbose:
+        print "\nMERGING..."
+
     global files
 
     merged = dict()
     for file in files:
+        
+        if options.verbose:
+            print "merging:", file
 
         artist = list(file_artists[file])[0]
         album = list(file_albums[file])[0]
@@ -100,7 +109,7 @@ def merge():
                     print "collision: replacing with greater bitrate file:", file
                 merged[unique] = file
             elif options.verbose:
-                print "collision: keeping greater bitdate file:", file
+                print "collision: keeping greater bitrate file:", file
     
     files = set(merged.values())
 
@@ -110,6 +119,9 @@ def index():
     For each source indicated on the command line, iterate through all media files and add them to the index.
     In the process, build a metadata tree.
     """
+    if options.verbose:
+        print "\nINDEXING..."
+
     for source in args:
         for file in locate("*.mp3", source):
             if options.verbose:
@@ -120,17 +132,36 @@ def index():
             if metadata != {}:
                 bitrate = mp3.info.bitrate
                 length =  mp3.info.length
-                artist = metadata["artist"][0]
-                album = metadata["album"][0]
-                title = metadata["title"][0]
-
-                trackno = None
-                trackof = None
+                
+                #Artist
+                try:
+                    artist = metadata["artist"][0]
+                except:
+                    artist = None
+                
+                #Album
+                try:
+                    album = metadata["album"][0]
+                except:
+                    album = None
+                
+                #Title
+                try:
+                    title = metadata["title"][0]
+                except:
+                    title = None
+                
+                #Track number
                 try:
                     trackno = int( metadata["tracknumber"][0].split('/')[0] )
+                except:
+                    trackno = None
+                
+                #Track of
+                try:
                     trackof = int( metadata["tracknumber"][0].split('/')[1] )
                 except:
-                    pass
+                    trackof = None
        
                 file_tracknos[file] = trackno
                 file_trackofs[file] = trackno
@@ -172,13 +203,16 @@ def format(file, format=None):
     track = list(file_titles[file])[0]
     trackno = file_tracknos[file]
 
-    format = os.path.join(artist, album, str(trackno).rjust(2,'0') + ' ' + track + '.mp3' )
+    format = os.path.join(unicode(artist), unicode(album), unicode(trackno).rjust(2,'0') + ' ' + unicode(track) + '.mp3' )
 
     return format
 
 
 def organize():
-   
+  
+    if options.verbose:
+        print "\nORGANIZING..."
+
     #Unique set of destinations
     dests = set()
 
