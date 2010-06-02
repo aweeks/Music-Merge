@@ -1,17 +1,29 @@
 #!/usr/bin/python
-import os, glob, sys, shutil, random, fnmatch
+#
+#Music Merge.  Intelligent music library merging (and some cool extras).
+#Copyright (C) 2010  Alex Weeks
+#
+#This program is free software: you can redistribute it and/or modify
+#it under the terms of the GNU General Public License as published by
+#the Free Software Foundation, either version 3 of the License, or
+#(at your option) any later version.
+#
+#This program is distributed in the hope that it will be useful,
+#but WITHOUT ANY WARRANTY; without even the implied warranty of
+#MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#GNU General Public License for more details.
+#
+#You should have received a copy of the GNU General Public License
+#along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+import os, glob, sys, shutil, random, fnmatch, pickle
 from optparse import OptionParser
-from mutagen.mp3 import EasyMP3, MP3
-from mutagen.flac import FLAC
+from mediafile import *
 
 #Ugly hack, set output encoding to utf8
 reload(sys)
 sys.setdefaultencoding('utf8')
 
-class MediaFile:
-    FLAC = 1
-    MP3  = 2
-    ext = {FLAC: "flac", MP3: "mp3",}
 
 #All files that we find
 files = set()
@@ -34,12 +46,11 @@ genre_files = dict()
 file_genres = dict()
 
 #File info
-file_tracknumbers = dict()
-file_disknumbers  = dict()
+file_tracknos = dict()
+file_trackofs = dict()
+file_disknos  = dict()
+file_diskofs  = dict()
 file_dates        = dict()
-
-file_bitrates = dict()
-file_lengths  = dict()
 
 def main():
     """
@@ -94,42 +105,28 @@ def main():
 
 #Taken from http://www.brunningonline.net/simon/blog/archives/002022.html
 def locate(patterns, root):
-    for pattern in patterns:
-        for path, dirs, files in os.walk(root):
-            for filename in [os.path.abspath(os.path.join(path, filename)) for filename in files if fnmatch.fnmatch(filename, pattern)]:
-                yield filename
-
-
-
-def fingerprint(file):
-    artist  = list( file_artists[file] )[0]
-    album   = list( file_albums[file]  )[0]
-    track   = list( file_titles[file]  )[0]
-        
-    trackno = file_tracknumbers[file][0]
-    diskno  = file_disknumbers [file][0] 
-    bitrate = file_bitrates[file]
-
-    return  (artist, album, track, trackno,)
+    for path, dirs, files in os.walk(root):
+        for file in [os.path.abspath(os.path.join(path, filename)) for filename in files]:
+            yield file
 
 
 def merge_resolve():
-    for f in merge:
-        conflicted = [ (file_types[file], file_bitrates[file], file,) for file in merge[f] ]
+    for fingerprint in merge:
+        conflicted = [ (file, file.bitrate, ) for file in merge[fingerprint] ]
         
         #Sort by bitrate (high to low)
         ordered = sorted(conflicted, key=lambda x:x[1], reverse=True)
         
-        #Sort by type
-        ordered = sorted(ordered, key=lambda x:x[0])
-       
-        ordered = [ entry[2] for entry in ordered ]
+        #Refactor the ordered list, only selecting files
+        ordered = [ entry[0] for entry in ordered ]
         
-        merge[f] = ordered[0]
+        #Place selected file back in merge
+        merge[fingerprint] = ordered[0]
+        
         if options.verbose:
-            print "selected:", ordered[0]
+            print "selected:", "(%f kb/s)" % (file.bitrate/1000.0,), ordered[0]
             for file in ordered[1:]:
-                print "discarded:", file
+                print "discarded:", "(%f kb/s)" % (file.bitrate/1000.0,), file
 
     global files
     files = merge.values()
@@ -146,69 +143,49 @@ def merge():
     merge = dict()
     
     for file in files:
-        f = fingerprint(file)
-        if f in merge:
-            merge[f].append(file)
+        fingerprint = file.fingerprint()
+        if fingerprint in merge:
+            merge[fingerprint].append(file)
         else:
-            merge[f] = [file,]
+            merge[fingerprint] = [file,]
 
         if options.verbose:
             print "merged:", file
     
     merge_resolve() 
 
-def get_tag(mp3, tag):
-    if ( tag == "tracknumber" or tag == "disknumber" ):
-        try:
-            data = [int(val) for val in mp3[tag][0].split('/') ]
-            if len(data) == 1:
-                data.append(None)
-        except:
-            data = [None, None]
-    else:
-        try:
-            data = mp3[tag]
-        except:
-            data = [None,]
-    return data
 
-
-def index_file(file):
+def index_file( path ):
     try:
-        if file.endswith(".mp3"):
-            media = EasyMP3(file)
-            type = MediaFile.MP3
-        elif file.endswith(".flac"):
-            media = FLAC(file)
-            type = MediaFile.FLAC
+        file = MediaFile.auto(path)
     except:
-        print >> sys.stderr, "invalid file:", file
+        print >> sys.stderr, "invalid file:", path
         return
-        
+    if not isinstance(file, MediaFile):
+        return
+
     files.add(file)
-    file_types[file] = type
-
-    if type == MediaFile.MP3:
-        file_bitrates[file] = media.info.bitrate
-    else:
-        file_bitrates[file] = None
     
-    file_lengths[file]  = media.info.length
-
-    index_store( file_artists, artist_files, file, get_tag(media, "artist")[0] )
-    index_store( file_albums,  album_files,  file, get_tag(media, "album" )[0] )
-    index_store( file_titles,  title_files,  file, get_tag(media, "title" )[0] )
-    index_store( file_genres,  genre_files,  file, get_tag(media, "genre" )[0] )
+    index_store( file_artists, artist_files, file, file.metadata["artist"] )
+    index_store( file_albums,  album_files,  file, file.metadata["album"] )
+    index_store( file_titles,  title_files,  file, file.metadata["title"] )
+    index_store( file_genres,  genre_files,  file, file.metadata["genre"] )
         
-    index_store( file_tracknumbers, None, file, get_tag(media, "tracknumber") )
-    index_store( file_disknumbers,  None, file, get_tag(media, "disknumber" ) )
+    index_store( file_tracknos, None, file, file.metadata["trackno"] )
+    index_store( file_trackofs, None, file, file.metadata["trackof"] )
+    
+    index_store( file_disknos,  None, file, file.metadata["diskno" ] )
+    index_store( file_diskofs,  None, file, file.metadata["diskof" ] )
 
-    index_store( file_dates,  None, file, get_tag(media, "date" ) )
+
+    #index_store( file_dates,  None, file, get_tag(media, "date" ) )
     
     if options.verbose:
         print "indexed:", file
     if options.debug:
-        print "    " + media.pprint().replace("\n", "\n    ")
+        print "length:", file.length
+        print "bitrate:", file.bitrate
+        print file.metadata
 
 
 def index():
@@ -221,45 +198,15 @@ def index():
     count = 0
 
     for source in args:
-        for path in locate(["*.mp3", "*.flac"], source):
+        for path in locate(["*.mp3", "*.flac",], source):
             index_file(path)
 
     if options.debug:
+         print "files:", files
          print "artists:", artist_files.keys()
          print "albums:", album_files.keys()
          print "titles:", title_files.keys()
          print "genres:", genre_files.keys()
-        #print file_tracknumbers.values()
-        #print file_disknumbers.values()
-
-def format(file, format=None):
-    if format==None:
-        format = options.format
-
-    artist  = unicode( list(file_artists[file])[0] ).replace("/", "-")
-    album   = unicode( list(file_albums[file] )[0] ).replace("/", "-")
-    title   = unicode( list(file_titles[file] )[0] ).replace("/", "-")
-
-    trackno = file_tracknumbers[file][0]
-    trackof = file_tracknumbers[file][1]
-    diskno  = file_disknumbers[file][0]
-    diskof  = file_tracknumbers[file][1]
-    
-    result = format
-    result = result.replace("%artist", artist)
-    result = result.replace("%album",  album )
-    result = result.replace("%title",  title )
-
-    result = result.replace("%trackno2", repr(trackno).rjust(2, "0") )
-    result = result.replace("%trackof2", repr(trackno).rjust(2, "0") )
-    
-    result = result.replace("%diskno2",  repr(diskno).rjust(2, "0") )
-    result = result.replace("%diskof2",  repr(diskno).rjust(2, "0") )
-
-    result = result.replace("%ext"    ,  MediaFile.ext[file_types[file]] )
-    
-    return result
-    #= os.path.join(artist, album, trackno.rjust(2,'0') + ' ' + track + '.mp3' )
 
 
 def organize():
@@ -268,9 +215,10 @@ def organize():
 
     #Unique set of destinations
     dests = set()
-
+    
+    global files
     for file in files:
-        dest = os.path.join( options.target, format(file) )
+        dest = os.path.join( options.target, file.format(options.format)  )
 
         while dest in dests:
             print "collision, appending unique identifier"
@@ -278,8 +226,6 @@ def organize():
            
         dests.add(dest)
         
-        
-
         if not options.pretend:
             try:
                 os.makedirs(os.path.dirname(dest))
@@ -287,15 +233,15 @@ def organize():
                 pass
             
             if options.copy:
-                shutil.copy2(file, dest)
+                shutil.copy2(file.path, dest)
             else:
-                shutil.move(file, dest)
+                shutil.move(file.path, dest)
 
         if options.verbose:
             if options.copy:
-                print  "copy: %s -> %s" % (file, dest,)
+                print  "copy: %s -> %s" % (file.path, dest,)
             else:
-                print  "move: %s -> %s" % (file, dest,)
+                print  "move: %s -> %s" % (file.path, dest,)
 
 def index_store( forward, reverse, a, b): 
     
