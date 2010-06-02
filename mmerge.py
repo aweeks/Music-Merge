@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-#Music Merge.  Intelligent music library merging (and some cool extras).
+#Music Merge.  Intelligent music library merging.
 #Copyright (C) 2010  Alex Weeks
 #
 #This program is free software: you can redistribute it and/or modify
