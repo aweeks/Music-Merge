@@ -231,18 +231,22 @@ def organize():
                 os.makedirs(os.path.dirname(dest))
             except:
                 pass
-            
-            if options.copy:
-                shutil.copy2(file.path, dest)
-            else:
-                shutil.move(file.path, dest)
+            try:
+            	if options.copy:
+                	shutil.copy2(file.path, dest)
+            	else:
+                	shutil.move(file.path, dest)
+	    except:
+	        pass
 
-        if options.verbose:
-            if options.copy:
-                print  "copy: %s -> %s" % (file.path, dest,)
-            else:
-                print  "move: %s -> %s" % (file.path, dest,)
-
+        try:
+		if options.verbose:
+			if options.copy:
+               	 		print  "copy: %s -> %s" % (file.path, dest,)
+            		else:
+               	 		print  "move: %s -> %s" % (file.path, dest,)
+	except:
+		pass
 def index_store( forward, reverse, a, b): 
     
     if reverse == None:
