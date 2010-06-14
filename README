@@ -1,0 +1,72 @@
+NAME
+        mmerge - Sane music library merging
+
+SYNOPSIS
+        mmerge [OPTIONS] [SRC ...] DEST
+
+DESCRIPTION
+        mmerge 
+
+OPTIONS
+  -m, --merge           Merge media files from [SRC ...] into DEST, selecting among duplicates according to PRIORITY.
+
+  -o, --organize        Organize media files according to FORMAT in DEST.
+
+  -h, --help            Print a short help document and terminate.
+
+  -v, --verbose         Verbose output.
+
+  -d, --debug           Debug output.  Implies --verbose.
+
+  -p, --pretend         Do not write any changes to disk.
+
+  -i, --index           Index media files (implied by --merge and --organize)
+
+  -c, --copy            Copy files, don't move them.
+
+  -P PRIORITY, --priority=PRIORITY
+                        Priority to use for selecting between duplicate files.
+
+                        Options are:
+                        
+                        +bitrate       - Selects greatest bitrate (default)
+                        -bitrate       - Select least bitrate
+
+
+  -F FORMAT, --format=FORMAT
+                        Organization format to be applied when moving files into DEST, if --organize is specified.  Files will be moved to DEST/FORMAT, where FORMAT is a string that can contain these replacement values:
+                        
+                            %album        - Album name
+                            %artist       - Artist name
+                            %title        - Track title
+
+                            %trackno      - Track number on disk
+                            %trackof      - Number of tracks on disk
+
+                            %diskno       - Disk number in album
+                            %diskof       - Number of disks in abum
+
+                            %filename     - File name of track, excluding extension
+                            %fileext      - Extension on track
+
+                            %ext          - Cannonical file extension for track type (recommended)
+
+                        %trackno, %trackof, %diskno, and %diskof may be zero-padded by appending a numeral to the end, specifying the padding length.  For example %trackno2.
+
+                        Default: "%artist/%album/%trackno2 %title.%ext"
+
+EXAMPLES
+        Organize LibraryA and LibraryB and LibraryC separately, in-place:
+            mmerge -o LibraryA LibraryB libraryC
+
+        Merges the contents of LibraryA, LibraryB and LibraryC into LibraryC.  Does not organize files in LibraryC.
+            mmerge -m LibraryA LibraryB libraryC
+
+        Merges the contents of LibraryA, LibraryB and LibraryC into LibraryC.  Also, organizes files in LibraryC.
+            mmerge -mo LibraryA LibraryB LibraryC
+
+
+        
+        
+
+        
